@@ -116,19 +116,65 @@ class KnowledgeBase(object):
             print("Invalid ask:", fact.statement)
             return []
 
-    def kb_retract(self, fact_or_rule):
-        """Retract a fact from the KB
 
-        Args:
-            fact (Fact) - Fact to be retracted
+    def kb_retractR(self, fact_or_rule):
+        if type(fact_or_rule) == Fact:
+            # not in KB
+            if not self.facts.count(fact_or_rule):
+                return
+            else:
+                myF = self._get_fact(fact_or_rule)
+                if not myF.asserted:
+                    if not myF.supported_by:
+                        for child in myF.supports_rules:
+                            for pair in child.supported_by:
+                                if pair[0] == myF:
+                                    child.supported_by.remove(pair)
 
-        Returns:
-            None
-        """
-        printv("Retracting {!r}", 0, verbose, [fact_or_rule])
-        ####################################################
-        # Student code goes here
+                                if len(child.supported_by) == 0:
+                                    self.kb_retractR(child)
+
+
+                        for child in myF.supports_facts:
+                            for pair in child.supported_by:
+                                if pair[0] == myF:
+                                    child.supported_by.remove(pair)
+                                if len(child.supported_by) == 0:
+                                    self.kb_retractR(child)
+                    
+                        self.facts.remove(myF)
+
+        else:
+            if not self.rules.count(fact_or_rule):
+                return
+            myR = self._get_rule(fact_or_rule)
+            if not myR.asserted:
+                if not myR.supported_by:
+                    for child in myR.supports_rules:
+                        for pair in child.supported_by:
+                            if pair[1] == myR:
+                                child.supported_by.remove(pair)
+                            if len(child.supported_by) == 0:
+                                self.kb_retractR(child)
+
+                    for child in myR.supports_facts:
+                        for pair in child.supported_by:
+                            if pair[1] == myR:
+                                child.supported_by.remove(pair)
+                            if len(child.supported_by) == 0:
+                                self.kb_retract(child)
+
+                    self.rules.remove(myR)
         
+
+
+    def kb_retract(self, fact_or_rule):
+        if type(fact_or_rule) == Fact:
+            myF = self._get_fact(fact_or_rule)
+            if myF.asserted:
+                myF.asserted = False
+            self.kb_retractR(myF)
+
 
 class InferenceEngine(object):
     def fc_infer(self, fact, rule, kb):
@@ -140,9 +186,36 @@ class InferenceEngine(object):
             kb (KnowledgeBase) - A KnowledgeBase
 
         Returns:
-            Nothing            
-        """
+            Nothing 
+        """           
+        
         printv('Attempting to infer from {!r} and {!r} => {!r}', 1, verbose,
             [fact.statement, rule.lhs, rule.rhs])
         ####################################################
         # Student code goes here
+        possBindings = match(rule.lhs[0], fact.statement)
+        supportList = [fact, rule]
+        allBindings = []
+
+        if possBindings:
+            newInfo = instantiate(rule.rhs, possBindings)
+
+            # New fact
+            if len(rule.lhs) == 1:
+                addMe = Fact(newInfo, [supportList])
+                
+            # New rule
+            else:
+                for i in range(len(rule.lhs) - 1):
+                    moreBindings = instantiate(rule.lhs[1 + i], possBindings)
+                    allBindings.append(moreBindings)
+
+                addMe = Rule([allBindings, newInfo], [supportList])
+
+            addMe.asserted = False
+            rule.supports_facts.append(addMe)
+            fact.supports_facts.append(addMe)
+            kb.kb_assert(addMe)
+
+
+
